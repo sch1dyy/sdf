@@ -1,15 +1,19 @@
 import { clamp, damp } from './util/math';
 
 export const DIST_MIN = 2.2;
-export const DIST_MAX = 6.4;
+// Kept inside the ring of lanterns so the camera never passes through one.
+export const DIST_MAX = 5.6;
 const DIST_DEFAULT = 4.1;
 const ELEV_MIN = -0.1;
 const ELEV_MAX = 0.62;
-const AUTO_AFTER = 4; // seconds of stillness before the sword turns by itself again
 
-/** Drag to turn the sword, drag vertically to raise the camera, wheel or pinch to move closer. */
+/**
+ * Orbit camera input: drag to circle the sword, drag vertically to raise the camera,
+ * wheel or pinch to move closer. Nothing in the scene itself is moved.
+ */
 export class Controls {
-  yaw = 0.65;
+  /** Angle of the camera around the sword, in radians. */
+  yaw = 0;
   yawVel = 0;
   elev = 0.05;
   dist = DIST_DEFAULT;
@@ -23,7 +27,6 @@ export class Controls {
   private elevTarget = this.elev;
   private distTarget = this.dist;
   private dragging = false;
-  private idle = 99;
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinch = 0;
   private travel = 0;
@@ -49,15 +52,14 @@ export class Controls {
     );
   }
 
-  update(dt: number, autoSpeed: number): void {
-    this.idle += dt;
+  update(dt: number): void {
     if (this.dragging) {
       // Holding still while pressed should not leave a stale spin behind.
       if (performance.now() - this.lastMove > 60) this.yawVel *= 1 - damp(12, dt);
     } else {
-      const resting = this.idle > AUTO_AFTER;
-      this.yawVel += ((resting ? autoSpeed : 0) - this.yawVel) * damp(resting ? 0.9 : 2.2, dt);
+      // After release the camera glides on and comes to rest.
       this.yaw += this.yawVel * dt;
+      this.yawVel *= 1 - damp(2.4, dt);
     }
     this.elev += (this.elevTarget - this.elev) * damp(7, dt);
     this.dist += (this.distTarget - this.dist) * damp(6, dt);
@@ -80,7 +82,6 @@ export class Controls {
       this.yawVel = 0;
       this.el.classList.add('is-dragging');
     }
-    this.idle = 0;
   };
 
   private move = (e: PointerEvent): void => {
@@ -90,7 +91,6 @@ export class Controls {
     const dy = e.clientY - p.y;
     p.x = e.clientX;
     p.y = e.clientY;
-    this.idle = 0;
 
     if (this.pointers.size >= 2) {
       const [a, b] = [...this.pointers.values()];
@@ -107,7 +107,7 @@ export class Controls {
     const elapsed = Math.max(8, now - this.lastMove) / 1000;
     this.lastMove = now;
     this.yaw += dx * perPixel;
-    this.yawVel = clamp(this.yawVel * 0.6 + ((dx * perPixel) / elapsed) * 0.4, -14, 14);
+    this.yawVel = clamp(this.yawVel * 0.6 + ((dx * perPixel) / elapsed) * 0.4, -8, 8);
     this.elevTarget = clamp(this.elevTarget + dy * 0.0035, ELEV_MIN, ELEV_MAX);
     this.travel += Math.abs(dx) + Math.abs(dy);
     if (!this.dragged && this.travel > 12) {
@@ -130,7 +130,6 @@ export class Controls {
   private wheel = (e: WheelEvent): void => {
     if (!this.enabled) return;
     this.distTarget = clamp(this.distTarget * Math.exp(e.deltaY * 0.0011), DIST_MIN, DIST_MAX);
-    this.idle = Math.min(this.idle, AUTO_AFTER - 1.5);
   };
 
   private key = (e: KeyboardEvent): void => {
@@ -159,6 +158,5 @@ export class Controls {
         return;
     }
     e.preventDefault();
-    this.idle = 0;
   };
 }

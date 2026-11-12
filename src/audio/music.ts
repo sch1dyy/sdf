@@ -97,6 +97,8 @@ export class Music {
   private dry!: GainNode;
   private send!: GainNode;
   private analyser!: AnalyserNode;
+  private output!: GainNode;
+  private volume = 0.7;
   private readonly scope = new Float32Array(1024);
   private noise!: AudioBuffer;
   private strings: AudioBuffer[] = [];
@@ -128,7 +130,7 @@ export class Music {
       void ctx.resume();
       const now = ctx.currentTime;
       this.master.gain.cancelScheduledValues(now);
-      this.master.gain.setTargetAtTime(1, now, 0.9);
+      this.master.gain.setTargetAtTime(1, now, 0.25);
       this.nextBell = now + 0.4;
       this.nextKoto = now + 2.4;
       this.nextFlute = now + 8;
@@ -138,12 +140,23 @@ export class Music {
       const ctx = this.ctx;
       const now = ctx.currentTime;
       this.master.gain.cancelScheduledValues(now);
-      this.master.gain.setTargetAtTime(0, now, 0.14);
+      this.master.gain.setTargetAtTime(0, now, 0.03);
       window.setTimeout(() => {
         if (!this.enabled) void ctx.suspend();
       }, 900);
     }
     return on;
+  }
+
+  /** 0..1, as shown on the slider. Applied after everything else, so it is a true output volume. */
+  setVolume(volume: number): void {
+    this.volume = Math.min(1, Math.max(0, volume));
+    if (this.ctx) this.output.gain.setTargetAtTime(this.outputGain(), this.ctx.currentTime, 0.03);
+  }
+
+  /** Squared so the slider feels even to the ear; 70% is the level the piece was mixed at. */
+  private outputGain(): number {
+    return Math.pow(this.volume / 0.7, 2);
   }
 
   /** A small bell, for when the blade is touched. */
@@ -182,7 +195,9 @@ export class Music {
     limiter.release.value = 0.3;
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 1024;
-    this.master.connect(limiter).connect(this.analyser).connect(ctx.destination);
+    this.output = ctx.createGain();
+    this.output.gain.value = this.outputGain();
+    this.master.connect(limiter).connect(this.analyser).connect(this.output).connect(ctx.destination);
 
     this.dry = ctx.createGain();
     this.dry.gain.value = 0.8;

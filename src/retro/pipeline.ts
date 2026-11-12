@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-/** Shorter screen edge in internal pixels, roughly a PS1/PS2 frame. */
-const TARGET_LINES = 320;
+/** Shorter screen edge in internal pixels, roughly a PS2 frame. */
+const TARGET_LINES = 432;
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -76,8 +76,8 @@ void main() {
   c *= uFade;
 
   // Film grain, stepped in time so it reads as grain rather than static.
-  float tick = floor(uTime * 14.0);
-  c += (hash(cell + tick * 7.13) - 0.5) * 0.035;
+  float tick = floor(uTime * 10.0);
+  c += (hash(cell + tick * 7.13) - 0.5) * 0.014;
 
   // 15-bit colour, dithered.
   vec3 c8 = clamp(c * 255.0 + psxDither(cell), 0.0, 255.0);
@@ -87,9 +87,8 @@ void main() {
   if (uPx >= 3.0) {
     vec2 f = fract(gl_FragCoord.xy / uPx);
     float gap = 1.0 - 1.0 / uPx;
-    c *= 1.0 - 0.1 * max(step(gap, f.x), step(gap, f.y));
+    c *= 1.0 - 0.05 * max(step(gap, f.x), step(gap, f.y));
   }
-  c += (hash(gl_FragCoord.xy + tick) - 0.5) * 0.012;
 
   gl_FragColor = vec4(c, 1.0);
 }`;
@@ -139,7 +138,7 @@ export class RetroPipeline {
     uTime: { value: 0 },
     uFade: { value: 0 },
     uExposure: { value: 1.15 },
-    uBloom: { value: 0.9 },
+    uBloom: { value: 0.75 },
   });
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { applyVertexSnap, psx } from '../retro/psx';
-import { clamp, damp, lerp, mulberry32 } from '../util/math';
+import { lerp, mulberry32 } from '../util/math';
 import * as tex from './textures';
 
 type Ring = THREE.Vector3[];
@@ -217,9 +216,9 @@ function tsubaGeometry(): THREE.BufferGeometry {
 }
 
 export interface KatanaRig {
-  /** Everything that turns with the visitor's drag: the stone, the sword and its scabbard. */
+  /** The stone, the sword and its scabbard. */
   group: THREE.Group;
-  update(time: number, dt: number, yaw: number, yawVel: number): void;
+  update(time: number, dt: number): void;
   /** A tap on the scene: the blade rings and the seal flares. */
   strike(): void;
 }
@@ -227,10 +226,12 @@ export interface KatanaRig {
 export function createKatana(envMap: THREE.Texture): KatanaRig {
   const rand = mulberry32(3);
   const group = new THREE.Group();
+  // A fixed pose: the opening view looks onto the flat of the blade rather than its edge.
+  group.rotation.y = 1.15;
 
   const metal = (color: number, roughness: number, metalness = 1) =>
-    psx(new THREE.MeshStandardMaterial({ color, roughness, metalness, envMap, envMapIntensity: 1.3 }));
-  const matte = (params: THREE.MeshLambertMaterialParameters) => psx(new THREE.MeshLambertMaterial(params));
+    new THREE.MeshStandardMaterial({ color, roughness, metalness, envMap, envMapIntensity: 1.3 });
+  const matte = (params: THREE.MeshLambertMaterialParameters) => new THREE.MeshLambertMaterial(params);
   const gold = metal(0xc9a14e, 0.34);
   const copper = metal(0xc0824a, 0.3);
   const shakudo = metal(0x1c1a26, 0.3, 0.9);
@@ -287,7 +288,6 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
     envMapIntensity: 2.1,
   });
   bladeMat.onBeforeCompile = (shader) => {
-    applyVertexSnap(shader);
     shader.uniforms.uGlint = glint;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec2 uGlint;')
@@ -303,7 +303,7 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   };
 
   const stations: number[] = [];
-  for (let i = 0; i <= 20; i++) stations.push((YOKOTE * i) / 20);
+  for (let i = 0; i <= 32; i++) stations.push((YOKOTE * i) / 32);
   for (let i = 1; i <= 6; i++) stations.push(YOKOTE + (KISSAKI * i * 0.999) / 6);
   add(sword, new THREE.Mesh(
     loft(stations.map((s) => bladeRing(s)), { faceted: true, uv: (j, i) => [stations[j] / LENGTH, BLADE_V[i]] }),
@@ -317,7 +317,7 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   // Guard and its washers.
   const tsuba = add(sword, new THREE.Mesh(
     tsubaGeometry(),
-    psx(new THREE.MeshStandardMaterial({ map: tex.tsubaFace(), metalness: 0.85, roughness: 0.42, envMap, envMapIntensity: 1.3 })),
+    new THREE.MeshStandardMaterial({ map: tex.tsubaFace(), metalness: 0.85, roughness: 0.42, envMap, envMapIntensity: 1.3 }),
   ));
   tsuba.position.y = 0.01;
   const oval = (rx: number, rz: number, h: number, y: number, mat: THREE.Material) => {
@@ -340,9 +340,9 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   for (let j = 0; j <= 8; j++) {
     const t = j / 8;
     const waist = Math.sin(Math.PI * t);
-    gripRings.push(ellipse(GRIP_START + GRIP_LEN * t, 0.032 * (1 - 0.08 * waist), 0.05 * (1 - 0.1 * waist), 14));
+    gripRings.push(ellipse(GRIP_START + GRIP_LEN * t, 0.032 * (1 - 0.08 * waist), 0.05 * (1 - 0.1 * waist), 18));
   }
-  add(sword, new THREE.Mesh(loft(gripRings), psx(new THREE.MeshLambertMaterial({ map: tex.tsukaWrap([2, 9]) }))));
+  add(sword, new THREE.Mesh(loft(gripRings), new THREE.MeshLambertMaterial({ map: tex.tsukaWrap([2, 9]) })));
 
   for (const [side, y] of [[1, 0.25], [-1, 0.4]]) {
     const menuki = add(sword, new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), gold));
@@ -351,6 +351,16 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   }
 
   const POMMEL = GRIP_START + GRIP_LEN;
+
+  // Bamboo pegs that pin the blade's tang inside the grip.
+  const bamboo = matte({ color: 0xd9cdae });
+  for (const y of [0.16, 0.47]) {
+    const peg = add(sword, new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.068, 6), bamboo));
+    peg.rotation.z = Math.PI / 2;
+    peg.position.y = y;
+  }
+  // A thin gold line where the back of the blade leaves the collar.
+  add(sword, new THREE.Mesh(loft([0.094, 0.1].map((s) => bladeRing(s, 0.0035)), { faceted: true }), gold));
   oval(0.036, 0.054, 0.03, POMMEL + 0.015, shakudo);
   oval(0.038, 0.056, 0.006, POMMEL + 0.001, gold);
   const dome = add(sword, new THREE.Mesh(new THREE.SphereGeometry(1, 14, 4, 0, Math.PI * 2, 0, Math.PI / 2), shakudo));
@@ -370,7 +380,7 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   string1.position.y = -0.025;
   const paper = add(talisman, new THREE.Mesh(
     new THREE.PlaneGeometry(0.07, 0.2),
-    psx(new THREE.MeshLambertMaterial({ map: tex.ofuda(), color: 0xcfc6c4, side: THREE.DoubleSide })),
+    new THREE.MeshLambertMaterial({ map: tex.ofuda(), color: 0xcfc6c4, side: THREE.DoubleSide }),
   ));
   paper.rotation.y = Math.PI / 2;
   paper.position.set(0, -0.15, 0.03);
@@ -404,7 +414,7 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   const sayaStations = Array.from({ length: 15 }, (_, i) => (SAYA * i) / 14);
   add(lay, new THREE.Mesh(
     loft(sayaStations.map((s) => sayaRing(s)), { capStart: true }),
-    psx(new THREE.MeshStandardMaterial({ map: tex.lacquer(), roughness: 0.28, metalness: 0.15, envMap, envMapIntensity: 1.1 })),
+    new THREE.MeshStandardMaterial({ map: tex.lacquer(), roughness: 0.28, metalness: 0.15, envMap, envMapIntensity: 1.1 }),
   ));
   add(lay, new THREE.Mesh(loft([-0.004, 0, 0.04, 0.045].map((s, i) => sayaRing(Math.max(s, 0), i === 0 || i === 3 ? 0.002 : 0.005).map((p) => p.setY(-s)))), gold));
   const mouth = add(lay, new THREE.Mesh(new THREE.CircleGeometry(1, 10), new THREE.MeshBasicMaterial({ color: 0x050306 })), false);
@@ -442,12 +452,8 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   add(group, new THREE.Mesh(new THREE.TubeGeometry(trail, 14, 0.007, 4), cord));
 
   // ── Motion ───────────────────────────────────────────────
-  let prevVel = 0;
-  let sway = 0;
-  let swayVel = 0;
   let ring = 0;
   let ringVel = 0;
-  let trailing = 0;
   let flare = 0;
   let gleamAt = -10;
   let now = 0;
@@ -455,33 +461,26 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   return {
     group,
 
-    update(time, dt, yaw, yawVel) {
+    update(time, dt) {
       now = time;
-      group.rotation.y = yaw;
 
-      // The embedded blade flexes against a sudden turn, then settles.
-      const accel = clamp((yawVel - prevVel) / Math.max(dt, 1e-3), -40, 40);
-      prevVel = yawVel;
-      // Small fixed steps keep the springs stable when a frame runs long.
+      // Struck, the blade rings against the stone and settles. Small fixed steps keep the
+      // spring stable when a frame runs long.
       const steps = Math.max(1, Math.ceil(dt / 0.016));
       const h = dt / steps;
       for (let i = 0; i < steps; i++) {
-        swayVel += (-sway * 90 - swayVel * 5 + accel * 0.012) * h;
-        sway += swayVel * h;
         ringVel += (-ring * 900 - ringVel * 3.2) * h;
         ring += ringVel * h;
       }
-      pivot.rotation.z = TILT_Z + sway + ring * 0.4;
+      pivot.rotation.z = TILT_Z + ring * 0.4;
       pivot.rotation.x = TILT_X + ring;
 
-      // Talisman and bell hang, drift in the air, and swing out when the sword is spun.
-      trailing += (clamp(yawVel * 0.25, -0.7, 0.7) - trailing) * damp(5, dt);
-      const fling = clamp(yawVel * yawVel * 0.035, 0, 0.6);
-      talisman.rotation.x = -fling + Math.sin(time * 1.1) * 0.05;
-      talisman.rotation.z = -trailing + Math.sin(time * 0.83 + 1) * 0.06;
-      talisman.rotation.y = Math.sin(time * 0.6) * 0.25 + trailing * 0.6;
-      bell.rotation.z = -fling + Math.sin(time * 1.3 + 2) * 0.04;
-      bell.rotation.x = trailing * 1.2 + Math.sin(time * 0.95) * 0.05;
+      // Talisman and bell hang and stir in the air.
+      talisman.rotation.x = Math.sin(time * 1.1) * 0.05;
+      talisman.rotation.z = Math.sin(time * 0.83 + 1) * 0.06;
+      talisman.rotation.y = Math.sin(time * 0.6) * 0.25;
+      bell.rotation.z = Math.sin(time * 1.3 + 2) * 0.04;
+      bell.rotation.x = Math.sin(time * 0.95) * 0.05;
 
       flare *= Math.exp(-dt * 1.7);
       sealMat.emissiveIntensity = 0.26 + 0.1 * Math.sin(time * 0.8) + flare * 1.8;

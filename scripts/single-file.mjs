@@ -1,10 +1,11 @@
-// Folds the production build into one self-contained file, dist/katana.html, that can be
+// Folds the production build into one self-contained file, export/index.html, that can be
 // opened directly from disk or sent to someone. Run with `npm run build:single`.
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const dist = join(root, 'dist');
 const asset = (ref) => join(dist, 'assets', basename(ref.replace(/["']/g, '')));
 
 let html = await readFile(join(dist, 'index.html'), 'utf8');
@@ -26,6 +27,7 @@ const js = (await readFile(asset(jsTag[1]), 'utf8')).replace(/<\/script/gi, '<\\
 html = html.replace(cssTag[0], () => `<style>${css}</style>`);
 html = html.replace(jsTag[0], () => `<script type="module">${js}</script>`);
 
-const out = join(dist, 'katana.html');
+const out = join(root, 'export', 'index.html');
+await mkdir(dirname(out), { recursive: true });
 await writeFile(out, html);
 console.log(`${out}: ${(Buffer.byteLength(html) / 1024).toFixed(0)} kB`);

@@ -13,19 +13,20 @@ npm install
 npm run dev      # development server
 npm run build    # type-check and build to dist/
 npm run preview  # serve the production build
-npm run build:single  # one self-contained file, dist/katana.html, that opens straight from disk
+npm run build:single  # one self-contained file, export/index.html, that opens straight from disk
 ```
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| Drag / swipe | Turn the katana (it keeps spinning with a little inertia) |
+| Drag / swipe | Circle the camera around the katana (the sword and shrine stay put) |
 | Drag up / down | Raise or lower the camera |
 | Wheel / pinch | Move closer to the guard and grip, or back out |
 | Tap / click | Strike the blade: it rings and the seal flares |
 | Arrow keys, `+` `-` | Keyboard equivalents |
 | `M` or the 音楽 button | Music on / off |
+| 音量 slider, `-` `+` buttons | Music volume (remembered between visits) |
 
 Music never starts by itself: the title screen asks whether to enter with sound or in silence.
 
@@ -39,10 +40,9 @@ Music never starts by itself: the title screen asks whether to enter with sound 
 | `src/scene/atmosphere.ts` | Dust, embers and petals, the shaft of light and drifting mist |
 | `src/scene/textures.ts` | Every texture, painted onto small canvases at start-up |
 | `src/scene/envmap.ts` | The dark "studio" the steel reflects |
-| `src/retro/pipeline.ts` | Low-resolution render target, bloom, 15-bit colour with the PlayStation dither table, grain and vignette |
-| `src/retro/psx.ts` | Vertex snapping, for the characteristic PS1 wobble |
+| `src/retro/pipeline.ts` | Low-resolution render target, bloom, 15-bit colour with the PlayStation dither table, light grain and vignette |
 | `src/audio/music.ts` | Generative score: Karplus-Strong koto, synthesised shakuhachi, drone, wind and bells |
-| `src/controls.ts` | Mouse, touch and keyboard input |
+| `src/controls.ts` | Orbit camera input: mouse, touch and keyboard |
 
 ### Fonts
 

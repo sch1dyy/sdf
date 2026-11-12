@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { Music } from './audio/music';
 import { Controls, DIST_MAX, DIST_MIN } from './controls';
 import { RetroPipeline } from './retro/pipeline';
-import { snapUniform } from './retro/psx';
 import { createAtmosphere } from './scene/atmosphere';
 import { createEnvMap } from './scene/envmap';
 import { createEnvironment } from './scene/environment';
@@ -31,8 +30,7 @@ function boot(): void {
 
   const controls = new Controls(canvas);
   const music = new Music();
-  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const motion = calm ? 0.25 : 1;
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
 
   let phase: 'title' | 'intro' | 'live' = 'title';
   let time = 0;
@@ -49,6 +47,7 @@ function boot(): void {
       canvas.focus({ preventScroll: true });
     },
     onToggleMusic: () => music.toggle(),
+    onVolume: (volume) => music.setVolume(volume),
   });
 
   controls.onFirstDrag = () => ui.dismissHint();
@@ -71,41 +70,38 @@ function boot(): void {
     const tan = clamp(0.21 / camera.aspect, Math.tan(THREE.MathUtils.degToRad(17)), Math.tan(THREE.MathUtils.degToRad(25)));
     camera.fov = THREE.MathUtils.radToDeg(Math.atan(tan) * 2);
     camera.updateProjectionMatrix();
-
-    snapUniform.value.set(x / 2, y / 2);
     atmosphere.setPixelScale(y / (2 * tan));
   }
   window.addEventListener('resize', resize);
   resize();
 
+  // The sword and the shrine never move: only the camera circles them.
   function placeCamera(): void {
     // The opening shot drifts in from far down the approach, arcing onto the sword's axis.
     const e = easeInOutCubic(intro);
     const closeness = 1 - (controls.dist - DIST_MIN) / (DIST_MAX - DIST_MIN);
     const dist = lerp(11.5, controls.dist, e);
     const elev = lerp(0.02, controls.elev, e);
-    const drift = (Math.sin(time * 0.11) * 0.07 + Math.sin(time * 0.047 + 1.3) * 0.04) * motion;
-    const azimuth = lerp(0.42, 0, e) + drift + controls.pointerX * 0.04 * e * motion;
+    const breathe = Math.sin(time * 0.09) * 0.025 * motion;
+    // Dragging right swings the camera left, as if turning the scene by hand.
+    const azimuth = lerp(0.42, 0, e) - controls.yaw + breathe + controls.pointerX * 0.03 * e * motion;
     // Moving closer lifts the gaze from the whole sword to the guard and grip.
-    const lookY = lerp(1.6, lerp(1.08, 1.62, smoothstep(0.45, 1, closeness)), e) + Math.sin(time * 0.23) * 0.015 * motion;
+    const lookY = lerp(1.6, lerp(1.08, 1.62, smoothstep(0.45, 1, closeness)), e);
 
     camera.position.set(
       Math.sin(azimuth) * Math.cos(elev) * dist,
-      Math.max(0.3, lookY + Math.sin(elev) * dist - controls.pointerY * 0.06 * e * motion),
+      Math.max(0.3, lookY + Math.sin(elev) * dist - controls.pointerY * 0.05 * e * motion),
       Math.cos(azimuth) * Math.cos(elev) * dist,
     );
     camera.lookAt(0, lookY, 0);
   }
 
-  /** How brightly the light over the sword burns: dim on the title screen, then it catches. */
+  /** How brightly the light over the sword burns: dim on the title screen, then it rises. */
   function ignition(): number {
     if (phase === 'title') return 0.2;
-    const since = time - enteredAt;
-    const rise = lerp(0.2, 1, smoothstep(0.3, 3.4, since));
-    // An old lamp stutters before it holds.
-    const stutter = since < 2.2 && Math.sin(time * 37) * Math.sin(time * 13.7) > 0.3 ? 0.55 : 1;
-    const breath = 1 + 0.05 * Math.sin(time * 0.7) + 0.02 * Math.sin(time * 2.9);
-    return rise * stutter * breath + pulse * 0.35 + loudness * 0.25;
+    const rise = lerp(0.2, 1, smoothstep(0.3, 3.6, time - enteredAt));
+    const breath = 1 + 0.04 * Math.sin(time * 0.7);
+    return rise * breath + pulse * 0.3 + loudness * 0.12;
   }
 
   let previous = performance.now();
@@ -125,11 +121,11 @@ function boot(): void {
     }
 
     pulse *= Math.exp(-dt * 2.2);
-    loudness += (music.level() - loudness) * damp(3, dt);
+    loudness += (music.level() - loudness) * damp(2, dt);
 
-    controls.update(dt, calm ? 0 : 0.13);
+    controls.update(dt);
     const ignite = ignition();
-    katana.update(time, dt, controls.yaw, controls.yawVel);
+    katana.update(time, dt);
     environment.update(time, ignite);
     atmosphere.update(time, ignite);
     placeCamera();
@@ -139,17 +135,15 @@ function boot(): void {
   }
   frame();
 
-  if (import.meta.env.DEV) {
-    // Dev-only handle for jumping past the opening shot while working on the scene.
-    const skip = () => {
-      phase = 'intro';
-      intro = 0.999;
-      enteredAt = time - 10;
-      document.getElementById('title')!.classList.add('is-leaving');
-      document.body.classList.add('is-entered');
-    };
-    Object.assign(window, { __blade: { controls, music, pipeline, camera, scene, renderer, skip, state: () => ({ phase, intro, time }) } });
-  }
+  // Handle for jumping past the opening shot while working on or testing the scene.
+  const skip = () => {
+    phase = 'intro';
+    intro = 0.999;
+    enteredAt = time - 10;
+    document.getElementById('title')!.classList.add('is-leaving');
+    document.body.classList.add('is-entered');
+  };
+  Object.assign(window, { __blade: { controls, music, katana, pipeline, camera, scene, renderer, skip, state: () => ({ phase, intro, time }) } });
 }
 
 try {

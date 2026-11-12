@@ -353,9 +353,6 @@ body {
 
 .music {
   all: unset;
-  position: absolute;
-  right: var(--right);
-  bottom: var(--bottom);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -366,18 +363,124 @@ body {
   letter-spacing: 0.2em;
   color: var(--ink-dim);
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
   transition:
-    opacity 2.4s ease,
     color 0.3s,
     border-color 0.3s;
 }
 
-/* The music control appears as soon as the visitor enters, before the rest of the HUD. */
-.is-entered .hud .music {
+/* Music and volume sit together bottom-right, and appear as soon as the visitor enters. */
+.audio {
+  position: absolute;
+  right: var(--right);
+  bottom: var(--bottom);
+  display: flex;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 6px;
+  max-width: calc(100vw - var(--left) - var(--right));
+  font: 12px/1 var(--pixel);
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+}
+
+.is-entered .hud .audio {
   opacity: 1;
   pointer-events: auto;
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 32px;
+  border: 1px solid rgba(243, 230, 236, 0.22);
+  background: rgba(8, 3, 12, 0.4);
+  --fill: var(--pink);
+}
+
+/* While the music is off the level reads as dormant rather than live. */
+.music[aria-pressed='false'] + .volume {
+  --fill: rgba(243, 230, 236, 0.42);
+}
+
+.volume__label {
+  color: var(--pink);
+  font-size: 11px;
+}
+
+.volume__step {
+  all: unset;
+  width: 18px;
+  height: 22px;
+  font: 15px/22px var(--pixel);
+  letter-spacing: 0;
+  text-align: center;
+  cursor: pointer;
+}
+
+.volume__step:hover {
+  color: #fff;
+}
+
+.volume__value {
+  min-width: 2.6em;
+  color: var(--ink);
+  letter-spacing: 0.1em;
+  text-align: right;
+}
+
+.volume__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: clamp(84px, 11vw, 120px);
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  --level: 70%;
+}
+
+/* A row of small blocks that light up to the current level. */
+.volume__slider::-webkit-slider-runnable-track {
+  height: 8px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, #0a050d 6px 8px),
+    linear-gradient(90deg, var(--fill) var(--level), rgba(243, 230, 236, 0.16) var(--level));
+}
+
+.volume__slider::-moz-range-track {
+  height: 8px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, #0a050d 6px 8px),
+    linear-gradient(90deg, var(--fill) var(--level), rgba(243, 230, 236, 0.16) var(--level));
+}
+
+.volume__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 16px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 0 8px var(--pink);
+}
+
+.volume__slider::-moz-range-thumb {
+  width: 4px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 0 8px var(--pink);
+}
+
+.volume__slider:focus-visible,
+.volume__step:focus-visible {
+  outline: 1px solid var(--pink);
+  outline-offset: 2px;
 }
 
 .music b {
@@ -463,7 +566,7 @@ body {
   }
 
   .hud__hint {
-    bottom: calc(var(--bottom) + 58px);
+    bottom: calc(var(--bottom) + 96px);
   }
 
   .menu__item {

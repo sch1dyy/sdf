@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { psx } from '../retro/psx';
 import { mulberry32 } from '../util/math';
 import * as tex from './textures';
 
@@ -65,7 +64,7 @@ export interface Environment {
 
 export function createEnvironment(scene: THREE.Scene): Environment {
   const rand = mulberry32(7);
-  const matte = (params: THREE.MeshLambertMaterialParameters) => psx(new THREE.MeshLambertMaterial(params));
+  const matte = (params: THREE.MeshLambertMaterialParameters) => new THREE.MeshLambertMaterial(params);
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x = 0, y = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
@@ -75,7 +74,7 @@ export function createEnvironment(scene: THREE.Scene): Environment {
   scene.fog = new THREE.FogExp2(0x0a0410, 0.026);
 
   // ── Light ────────────────────────────────────────────────
-  scene.add(new THREE.HemisphereLight(0x4a2c66, 0x100609, 0.4));
+  scene.add(new THREE.HemisphereLight(0x4a2c66, 0x100609, 0.5));
 
   const moonlight = new THREE.DirectionalLight(0xa860f0, 0.5);
   moonlight.position.set(-7, 8, -12);
@@ -86,7 +85,7 @@ export function createEnvironment(scene: THREE.Scene): Environment {
   key.position.set(0.9, 8.2, 3.6);
   key.target.position.set(0, 0.5, 0);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.near = 3;
   key.shadow.camera.far = 14;
   key.shadow.bias = -0.0015;
@@ -102,6 +101,11 @@ export function createEnvironment(scene: THREE.Scene): Environment {
   wash.position.set(0, 2.2, -0.5);
   wash.target.position.set(0, 3.2, -11);
   scene.add(wash, wash.target);
+
+  // Cool moonlit rim from behind, so the sword separates from the dark.
+  const rim = new THREE.PointLight(0x8a6cff, 9, 7, 2);
+  rim.position.set(-1.5, 2.4, -2.2);
+  scene.add(rim);
 
   // ── Sky, moon and mountains ──────────────────────────────
   const skyUniforms = {
@@ -408,6 +412,36 @@ export function createEnvironment(scene: THREE.Scene): Environment {
   sakura(10.5, -20, 14, 1.5);
   sakura(-6, -25, 15, 1.3);
   sakura(6.5, -31, 16, 1.4);
+
+  // The courtyard continues behind the opening view, for when the camera circles round.
+  torii(17, 0.95, 0.03);
+  lantern(-4.4, 8, 0);
+  lantern(4.4, 8, 0);
+  sakura(-8.5, 9.5, 17, 1.3);
+  sakura(9, 12, 18, 1.45);
+  sakura(-13, 1, 19, 1.5);
+  sakura(13.5, -2, 20, 1.5);
+
+  // Painted-in occlusion: soft dark pools where heavy things meet the paving.
+  const shade = (x: number, z: number, size: number, opacity: number, map: THREE.Texture) => {
+    const m = mesh(
+      new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({ map, transparent: true, opacity, depthWrite: false }),
+      x,
+      0.02,
+      z,
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.renderOrder = 1;
+    scene.add(m);
+  };
+  const ringShade = tex.contact(0.62);
+  const footShade = tex.contact(0.3);
+  shade(0, 0, 5.6, 0.7, ringShade);
+  for (const [x, z] of [[-3.1, -5.6], [3.1, -5.6], [-3, -15.4], [3, -15.4], [-4.4, 8], [4.4, 8]]) shade(x, z, 1.9, 0.6, footShade);
+  for (const [z, s] of [[-11, 1], [-19.5, 0.92], [-27, 0.86], [17, 0.95]]) {
+    for (const side of [-1, 1]) shade(side * 2.18 * s, z, 2.1 * s, 0.6, footShade);
+  }
 
   return {
     update(time, ignite) {

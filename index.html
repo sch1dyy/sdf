@@ -64,11 +64,20 @@
         <span lang="ja">ドラッグで回転</span>
       </p>
 
-      <button class="music" id="music" type="button" aria-pressed="false" aria-label="Music">
-        <span class="music__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        <span lang="ja">音楽</span>
-        <b id="music-state">OFF</b>
-      </button>
+      <div class="audio">
+        <button class="music" id="music" type="button" aria-pressed="false" aria-label="Music on or off">
+          <span class="music__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span lang="ja">音楽</span>
+          <b id="music-state">OFF</b>
+        </button>
+        <div class="volume" role="group" aria-label="Music volume">
+          <span class="volume__label" lang="ja" aria-hidden="true">音量</span>
+          <button class="volume__step" id="volume-down" type="button" aria-label="Volume down">-</button>
+          <input class="volume__slider" id="volume" type="range" min="0" max="100" step="1" value="70" aria-label="Music volume" />
+          <button class="volume__step" id="volume-up" type="button" aria-label="Volume up">+</button>
+          <output class="volume__value" id="volume-value" for="volume">70</output>
+        </div>
+      </div>
     </div>
 
     <p class="fallback">This scene needs WebGL 2, which this browser could not start.</p>

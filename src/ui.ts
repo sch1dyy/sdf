@@ -1,6 +1,8 @@
 interface Handlers {
   onEnter(withSound: boolean): void;
   onToggleMusic(): boolean;
+  /** volume is 0..1 */
+  onVolume(volume: number): void;
 }
 
 export interface UI {
@@ -10,17 +12,52 @@ export interface UI {
   dismissHint(): void;
 }
 
+const VOLUME_KEY = 'forgotten-blade:volume';
+const DEFAULT_VOLUME = 70;
+
+/** The chosen volume survives reloads and moving around the site. */
+function storedVolume(): number {
+  try {
+    const raw = localStorage.getItem(VOLUME_KEY);
+    const value = raw === null ? NaN : Number(raw);
+    return Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : DEFAULT_VOLUME;
+  } catch {
+    return DEFAULT_VOLUME; // storage can be unavailable, for instance in private modes
+  }
+}
+
 export function initUI(handlers: Handlers): UI {
   const title = document.getElementById('title')!;
   const hint = document.getElementById('hint')!;
   const music = document.getElementById('music') as HTMLButtonElement;
   const musicState = document.getElementById('music-state')!;
+  const slider = document.getElementById('volume') as HTMLInputElement;
+  const volumeValue = document.getElementById('volume-value')!;
   const choices = [...title.querySelectorAll<HTMLButtonElement>('.menu__item')];
 
   const setMusic = (on: boolean) => {
     music.setAttribute('aria-pressed', String(on));
     musicState.textContent = on ? 'ON' : 'OFF';
   };
+
+  const setVolume = (percent: number, save = true) => {
+    const value = Math.min(100, Math.max(0, Math.round(percent)));
+    slider.value = String(value);
+    slider.style.setProperty('--level', `${value}%`);
+    volumeValue.textContent = String(value);
+    handlers.onVolume(value / 100);
+    if (!save) return;
+    try {
+      localStorage.setItem(VOLUME_KEY, String(value));
+    } catch {
+      /* not persisted this time */
+    }
+  };
+  setVolume(storedVolume(), false);
+
+  slider.addEventListener('input', () => setVolume(Number(slider.value)));
+  document.getElementById('volume-down')!.addEventListener('click', () => setVolume(Number(slider.value) - 10));
+  document.getElementById('volume-up')!.addEventListener('click', () => setVolume(Number(slider.value) + 10));
 
   for (const choice of choices) {
     choice.addEventListener('click', () => {

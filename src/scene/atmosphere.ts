@@ -220,6 +220,7 @@ export function createAtmosphere(scene: THREE.Scene): Atmosphere {
       color: i % 2 ? 0x5a2a66 : 0x3e1c52,
       transparent: true,
       opacity,
+      side: THREE.DoubleSide,
       depthWrite: false,
       fog: false,
       blending: THREE.AdditiveBlending,
