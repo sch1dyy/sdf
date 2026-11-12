@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** Shorter screen edge in internal pixels, roughly a PS2 frame. */
-const TARGET_LINES = 432;
+const TARGET_LINES = 540;
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -148,8 +148,9 @@ export class RetroPipeline {
   }
 
   /** Sizes the internal buffers for a drawing buffer of the given size (in device pixels). */
-  setSize(width: number, height: number): void {
-    const px = Math.max(2, Math.round(Math.min(width, height) / TARGET_LINES));
+  setSize(width: number, height: number, sharp = false): void {
+    // "sharp" renders close to full resolution, for inspecting the character up close.
+    const px = sharp ? Math.max(1, Math.round(Math.min(width, height) / 1000)) : Math.max(2, Math.round(Math.min(width, height) / TARGET_LINES));
     const w = Math.ceil(width / px);
     const h = Math.ceil(height / px);
     this.internal.set(w, h);

@@ -24,6 +24,7 @@ npm run build:single  # one self-contained file, export/index.html, that opens s
 | Drag up / down | Raise or lower the camera |
 | Wheel / pinch | Move closer to the guard and grip, or back out |
 | Tap / click | Strike the blade: it rings and the seal flares |
+| Click the figure (or its "CLICK TO INSPECT" label) | Inspect him: drag to circle, wheel or pinch to zoom, `Esc` or BACK to return |
 | Arrow keys, `+` `-` | Keyboard equivalents |
 | `M` or the 音楽 button | Music on / off |
 | 音量 slider, `-` `+` buttons | Music volume (remembered between visits) |
@@ -35,6 +36,7 @@ Music never starts by itself: the title screen asks whether to enter with sound 
 | Path | What it does |
 | --- | --- |
 | `src/main.ts` | Boots the scene, runs the frame loop, the opening camera move and the lighting "ignition" |
+| `src/scene/character.ts` | The Killua figure, sculpted in code: cel-shaded body, jointed hands, hair locks, painted face and hoodie |
 | `src/scene/katana.ts` | The sword, built procedurally: ridged blade with temper line, collar, pierced guard, wrapped grip, talisman, bell, scabbard and the carved stone it stands in |
 | `src/scene/environment.ts` | Sky, moon, mountains, torii, lanterns, shrine, pagoda, sakura and the lights |
 | `src/scene/atmosphere.ts` | Dust, embers and petals, the shaft of light and drifting mist |

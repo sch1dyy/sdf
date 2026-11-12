@@ -3,6 +3,8 @@ interface Handlers {
   onToggleMusic(): boolean;
   /** volume is 0..1 */
   onVolume(volume: number): void;
+  onInspect(): void;
+  onExitInspect(): void;
 }
 
 export interface UI {
@@ -10,6 +12,9 @@ export interface UI {
   /** Reveals the title, hint and details once the camera has settled. */
   showHud(): void;
   dismissHint(): void;
+  setInspecting(on: boolean): void;
+  /** Moves the "click to inspect" label to a point on screen, in CSS pixels. */
+  placeLabel(x: number, y: number, visible: boolean, hot: boolean): void;
 }
 
 const VOLUME_KEY = 'forgotten-blade:volume';
@@ -70,6 +75,10 @@ export function initUI(handlers: Handlers): UI {
   // Like a console title screen, the first option starts out selected.
   choices[0]?.focus({ preventScroll: true });
 
+  const tag = document.getElementById('inspect-tag') as HTMLButtonElement;
+  tag.addEventListener('click', () => handlers.onInspect());
+  document.getElementById('inspect-back')!.addEventListener('click', () => handlers.onExitInspect());
+
   music.addEventListener('click', () => setMusic(handlers.onToggleMusic()));
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'm' && document.body.classList.contains('is-entered')) setMusic(handlers.onToggleMusic());
@@ -79,5 +88,11 @@ export function initUI(handlers: Handlers): UI {
     setMusic,
     showHud: () => document.body.classList.add('is-live'),
     dismissHint: () => hint.classList.add('is-done'),
+    setInspecting: (on) => document.body.classList.toggle('is-inspecting', on),
+    placeLabel(x, y, visible, hot) {
+      tag.classList.toggle('is-shown', visible);
+      tag.classList.toggle('is-hot', hot);
+      if (visible) tag.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+    },
   };
 }
