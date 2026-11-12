@@ -14,7 +14,7 @@ import { clamp, damp, easeInOutCubic, lerp, smoothstep } from './util/math';
 const INTRO_SECONDS = 7.5;
 const INSPECT_SECONDS = 1.4;
 const MAX_PIXEL_RATIO = 2;
-const INSPECT_START: Orbit = { yaw: 0.25, elev: 0.06, dist: 3.3 };
+const INSPECT_START: Orbit = { yaw: 0.25, elev: 0.06, dist: 3.9 };
 
 function boot(): void {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;

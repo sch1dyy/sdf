@@ -278,8 +278,8 @@ export function createEnvironment(scene: THREE.Scene): Environment {
     g.rotation.y = rand() * 0.5;
     scene.add(g);
   };
-  lantern(-3.4, -8.4, 7);
-  lantern(3.4, -8.4, 7);
+  lantern(-3.6, -9.6, 7);
+  lantern(3.6, -9.6, 7);
   lantern(-3, -15.4, 0);
   lantern(3, -15.4, 0);
 
@@ -440,7 +440,7 @@ export function createEnvironment(scene: THREE.Scene): Environment {
   const ringShade = tex.contact(0.62);
   const footShade = tex.contact(0.3);
   shade(0, 0, 5.6, 0.7, ringShade);
-  for (const [x, z] of [[-3.4, -8.4], [3.4, -8.4], [-3, -15.4], [3, -15.4], [-4.4, 8], [4.4, 8]]) shade(x, z, 1.9, 0.6, footShade);
+  for (const [x, z] of [[-3.6, -9.6], [3.6, -9.6], [-3, -15.4], [3, -15.4], [-4.4, 8], [4.4, 8]]) shade(x, z, 1.9, 0.6, footShade);
   for (const [z, s] of [[-11, 1], [-19.5, 0.92], [-27, 0.86], [17, 0.95]]) {
     for (const side of [-1, 1]) shade(side * 2.18 * s, z, 2.1 * s, 0.6, footShade);
   }

@@ -14,9 +14,9 @@ export interface Limits {
 }
 
 /** Orbiting the sword. The far limit keeps the camera inside the ring where the figure stands. */
-export const SCENE_LIMITS: Limits = { distMin: 2.2, distMax: 4.6, elevMin: -0.1, elevMax: 0.62 };
+export const SCENE_LIMITS: Limits = { distMin: 2.2, distMax: 4.3, elevMin: -0.1, elevMax: 0.62 };
 /** Orbiting the character while inspecting him. */
-export const INSPECT_LIMITS: Limits = { distMin: 1.0, distMax: 3.6, elevMin: -0.12, elevMax: 0.9 };
+export const INSPECT_LIMITS: Limits = { distMin: 1.0, distMax: 4.2, elevMin: -0.12, elevMax: 0.9 };
 export const SCENE_START: Orbit = { yaw: 0, elev: 0.05, dist: 4.1 };
 
 /**

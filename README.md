@@ -36,7 +36,7 @@ Music never starts by itself: the title screen asks whether to enter with sound 
 | Path | What it does |
 | --- | --- |
 | `src/main.ts` | Boots the scene, runs the frame loop, the opening camera move and the lighting "ignition" |
-| `src/scene/character.ts` | The Killua figure, sculpted in code: cel-shaded body, jointed hands, hair locks, painted face and hoodie |
+| `src/scene/character.ts` | The GIGACHAD Killua parody figure, sculpted in code: cel-shaded muscles, slab jaw, jointed hands, hair locks, painted face and hoodie |
 | `src/scene/katana.ts` | The sword, built procedurally: ridged blade with temper line, collar, pierced guard, wrapped grip, talisman, bell, scabbard and the carved stone it stands in |
 | `src/scene/environment.ts` | Sky, moon, mountains, torii, lanterns, shrine, pagoda, sakura and the lights |
 | `src/scene/atmosphere.ts` | Dust, embers and petals, the shaft of light and drifting mist |
