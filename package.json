@@ -1,0 +1,25 @@
+{
+  "name": "wasurerareta-yaiba",
+  "private": true,
+  "version": "1.0.0",
+  "description": "忘れられた刃 — an interactive PS1-style 3D katana shrine built with Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "fonts": "node scripts/subset-fonts.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@fontsource/dotgothic16": "^5.3.1",
+    "@fontsource/shippori-mincho": "^5.3.0",
+    "@types/three": "^0.187.0",
+    "subset-font": "^2.9.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
