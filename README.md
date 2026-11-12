@@ -13,6 +13,7 @@ npm install
 npm run dev      # development server
 npm run build    # type-check and build to dist/
 npm run preview  # serve the production build
+npm run build:single  # one self-contained file, dist/katana.html, that opens straight from disk
 ```
 
 ## Controls
