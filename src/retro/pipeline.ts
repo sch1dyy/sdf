@@ -41,6 +41,14 @@ uniform float uTime;
 uniform float uFade;
 uniform float uExposure;
 uniform float uBloom;
+uniform float uAspect;
+uniform vec2 uShake;
+uniform vec3 uCut;      // direction of the cut (aspect-corrected, y up) and its half length
+uniform vec3 uSlash;    // brightness, half width, how far along it has travelled
+uniform float uDark;
+uniform float uOpen;
+uniform float uFlash;
+uniform float uBlur;
 
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -61,9 +69,18 @@ float psxDither(vec2 p) {
 void main() {
   // Every screen pixel inside a block reads the same low-res texel.
   vec2 cell = floor(gl_FragCoord.xy / uPx);
-  vec2 uv = (cell + 0.5) / uRes;
+  vec2 uv = (cell + 0.5) / uRes + uShake;
 
-  vec3 c = texture2D(tScene, uv).rgb;
+  vec3 c;
+  if (uBlur > 0.0) {
+    // Smear along the cut while the blade is moving.
+    vec2 stride = vec2(uCut.x / uAspect, uCut.y) * uBlur / 3.0;
+    c = vec3(0.0);
+    for (int i = -3; i <= 3; i++) c += texture2D(tScene, uv + stride * float(i)).rgb;
+    c /= 7.0;
+  } else {
+    c = texture2D(tScene, uv).rgb;
+  }
   c += (texture2D(tBloomNear, uv).rgb * 0.6 + texture2D(tBloomFar, uv).rgb * 0.9) * uBloom;
 
   c = 1.0 - exp(-c * uExposure);
@@ -74,6 +91,25 @@ void main() {
   c = mix(c, c * c * (3.0 - 2.0 * c), 0.35);
   c += vec3(0.008, 0.002, 0.012) * (1.0 - c);
   c *= uFade;
+
+  if (uDark > 0.0 || uSlash.x > 0.0) {
+    vec2 sp = (uv - 0.5) * vec2(uAspect, 1.0);
+    float along = dot(sp, uCut.xy) / uCut.z;
+    float across = abs(dot(sp, vec2(-uCut.y, uCut.x)));
+
+    // Darkness that parts along the cut, its edge breaking up in blocks.
+    float ragged = 1.0 + (hash(floor(cell / 4.0) + 3.0) - 0.5) * 0.5 + (hash(cell + 9.0) - 0.5) * 0.12;
+    c *= 1.0 - uDark * step(uOpen * ragged, across);
+
+    // The cut itself: a white blade of light, pointed at both ends, drawn corner to corner.
+    float taper = pow(max(0.0, 1.0 - along * along), 0.6);
+    float w = uSlash.y * taper;
+    float core = smoothstep(w, w * 0.35, across) * step(0.00001, w);
+    float halo = exp(-across / (w * 5.0 + 0.004)) * 0.55 * taper;
+    float drawn = step(along, mix(-1.05, 1.05, uSlash.z));
+    c += (vec3(1.6) * core + vec3(1.0, 0.55, 0.85) * halo) * drawn * uSlash.x;
+  }
+  c += uFlash;
 
   // Film grain, stepped in time so it reads as grain rather than static.
   float tick = floor(uTime * 10.0);
@@ -107,12 +143,28 @@ function material(fragmentShader: string, uniforms: Record<string, THREE.IUnifor
 }
 
 /**
- * Renders the scene at a PS1-like resolution, adds a soft bloom, then scales it up with
+ * Renders the scene at a PS2-like resolution, adds a soft bloom, then scales it up with
  * 15-bit dithered colour, grain and a vignette.
  */
 export class RetroPipeline {
   readonly internal = new THREE.Vector2(480, 270);
   fade = 0;
+
+  /** Screen-space effects for the drawing of the sword. All zero the rest of the time. */
+  readonly fx = {
+    /** Black laid over the picture. */
+    dark: 0,
+    /** How far that black has parted either side of the cut, in screen heights. */
+    open: 0,
+    /** Brightness of the white cut, its half width, and how far along it has been drawn. */
+    slash: 0,
+    slashWidth: 0,
+    slashProgress: 0,
+    flash: 0,
+    /** Smear along the cut, in screen heights. */
+    blur: 0,
+    shake: new THREE.Vector2(),
+  };
 
   private readonly sceneRT = target(true);
   private readonly half = [target(false), target(false)];
@@ -139,6 +191,14 @@ export class RetroPipeline {
     uFade: { value: 0 },
     uExposure: { value: 1.15 },
     uBloom: { value: 0.75 },
+    uAspect: { value: 16 / 9 },
+    uShake: { value: this.fx.shake },
+    uCut: { value: new THREE.Vector3(-1, 0, 1) },
+    uSlash: { value: new THREE.Vector3() },
+    uDark: { value: 0 },
+    uOpen: { value: 0 },
+    uFlash: { value: 0 },
+    uBlur: { value: 0 },
   });
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
@@ -159,6 +219,14 @@ export class RetroPipeline {
     for (const rt of this.quarter) rt.setSize(Math.ceil(w / 4), Math.ceil(h / 4));
     this.final.uniforms.uRes.value.set(w, h);
     this.final.uniforms.uPx.value = px;
+
+    // The cut runs from the upper right to the lower left, a little flatter than the
+    // screen's own diagonal, and comes to a point just past the edges.
+    const aspect = w / h;
+    const angle = Math.atan2(1, aspect) * 0.8;
+    const reach = Math.min(aspect / 2 / Math.cos(angle), 0.5 / Math.sin(angle)) * 1.04;
+    this.final.uniforms.uAspect.value = aspect;
+    this.final.uniforms.uCut.value.set(-Math.cos(angle), -Math.sin(angle), reach);
   }
 
   render(scene: THREE.Scene, camera: THREE.Camera, time: number): void {
@@ -173,8 +241,14 @@ export class RetroPipeline {
     this.blurPair(this.quarter, 1);
     this.blurPair(this.quarter, 1.6);
 
-    this.final.uniforms.uTime.value = time;
-    this.final.uniforms.uFade.value = this.fade;
+    const u = this.final.uniforms;
+    u.uTime.value = time;
+    u.uFade.value = this.fade;
+    u.uSlash.value.set(this.fx.slash, this.fx.slashWidth, this.fx.slashProgress);
+    u.uDark.value = this.fx.dark;
+    u.uOpen.value = this.fx.open;
+    u.uFlash.value = this.fx.flash;
+    u.uBlur.value = this.fx.blur;
     this.pass(this.final, null);
   }
 

@@ -23,7 +23,7 @@ npm run build:single  # one self-contained file, export/index.html, that opens s
 | Drag / swipe | Circle the camera around the katana (the sword and shrine stay put) |
 | Drag up / down | Raise or lower the camera |
 | Wheel / pinch | Move closer to the guard and grip, or back out |
-| Tap / click | Strike the blade: it rings and the seal flares |
+| Click the katana | It is drawn from the stone, the shrine goes dark, and one cut splits the screen; then everything returns to how it was |
 | Click the figure (or its "CLICK TO INSPECT" label) | Inspect him: drag to circle, wheel or pinch to zoom, `Esc` or BACK to return |
 | Arrow keys, `+` `-` | Keyboard equivalents |
 | `M` or the 音楽 button | Music on / off |
@@ -44,6 +44,7 @@ Music never starts by itself: the title screen asks whether to enter with sound 
 | `src/scene/envmap.ts` | The dark "studio" the steel reflects |
 | `src/retro/pipeline.ts` | Low-resolution render target, bloom, 15-bit colour with the PlayStation dither table, light grain and vignette |
 | `src/audio/music.ts` | Generative score: Karplus-Strong koto, synthesised shakuhachi, drone, wind and bells |
+| `src/cinematic.ts` | The drawing of the sword: its timeline, the sword's path, sparks, motion trail and camera |
 | `src/controls.ts` | Orbit camera input: mouse, touch and keyboard |
 
 ### Fonts

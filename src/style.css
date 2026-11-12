@@ -75,8 +75,42 @@ body {
   cursor: grabbing;
 }
 
-#scene.can-inspect {
+#scene.is-clickable {
   cursor: pointer;
+}
+
+/* ── The drawing of the sword ─────────────────────────────── */
+
+/* Letterbox bars close in while the sequence plays. */
+.bars::before,
+.bars::after {
+  content: '';
+  position: fixed;
+  right: 0;
+  left: 0;
+  z-index: 0;
+  height: 0;
+  background: #000;
+  pointer-events: none;
+  transition: height 1.2s cubic-bezier(0.6, 0, 0.2, 1);
+}
+
+.bars::before {
+  top: 0;
+}
+
+.bars::after {
+  bottom: 0;
+}
+
+.is-cinematic .bars::before,
+.is-cinematic .bars::after {
+  height: 9vh;
+}
+
+.is-cinematic.is-live .hud > :not(.audio) {
+  opacity: 0;
+  transition-duration: 0.6s;
 }
 
 /* ── Character inspection ─────────────────────────────────── */

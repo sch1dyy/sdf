@@ -98,6 +98,8 @@ export class Music {
   private send!: GainNode;
   private analyser!: AnalyserNode;
   private output!: GainNode;
+  private ducker!: GainNode;
+  private sfxBus!: GainNode;
   private volume = 0.7;
   private readonly scope = new Float32Array(1024);
   private noise!: AudioBuffer;
@@ -159,10 +161,198 @@ export class Music {
     return Math.pow(this.volume / 0.7, 2);
   }
 
-  /** A small bell, for when the blade is touched. */
-  chime(): void {
-    if (!this.ctx || !this.enabled) return;
-    this.bell(mtof(pick([86, 89, 91, 93])), this.ctx.currentTime + 0.01, 0.5, 0.3);
+  /** Lets the music fall back to `level` (1 is normal) over roughly `seconds`. */
+  duck(level: number, seconds: number): void {
+    if (this.ctx) this.ducker.gain.setTargetAtTime(level, this.ctx.currentTime, seconds / 3);
+  }
+
+  /** One-shot effects for the drawing of the sword. They obey the music switch and the volume. */
+  sfx(name: 'focus' | 'scrape' | 'jolt' | 'draw' | 'riser' | 'slash' | 'return', seconds = 1): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.enabled || ctx.state !== 'running') return;
+    const at = ctx.currentTime + 0.01;
+    switch (name) {
+      case 'focus': // the air tightens
+        this.thump(at, 62, 40, 1.6, 0.3, 0.5);
+        this.hiss(at, 1.4, 260, 900, 0.7, 0.05, 0.7);
+        break;
+      case 'scrape':
+        this.grind(at, seconds);
+        break;
+      case 'jolt': // the blade slips a finger's width
+        this.hiss(at, 0.2, 2800, 1300, 5, 0.2, 0.004);
+        this.ring(at, [1870, 2794], 0.05, 0.3, 0);
+        break;
+      case 'draw': // steel leaving its seat
+        this.hiss(at, 0.6, 2000, 8500, 2, 0.36, 0.03);
+        this.ring(at + 0.03, [2093, 3136, 4186, 5588, 7040, 8372], 0.1, 1.6, 40);
+        this.thump(at, 90, 45, 0.5, 0.25, 0.01);
+        break;
+      case 'riser':
+        this.swell(at, seconds);
+        break;
+      case 'slash': // the cut, and the weight behind it
+        this.hiss(at, 0.22, 7500, 450, 1.1, 0.95, 0.004);
+        this.hiss(at + 0.02, 1.5, 5200, 2400, 0.6, 0.1, 0.01);
+        this.thump(at + 0.03, 130, 30, 1.4, 0.95, 0.006);
+        this.ring(at + 0.01, [3322, 4435, 5919, 7459], 0.12, 1.2, -25);
+        break;
+      case 'return':
+        this.bell(mtof(50), at, 0.7, 1);
+        break;
+    }
+  }
+
+  /** Effects bypass the music's fader; a little of each still goes to the hall. */
+  private toSfx(node: AudioNode, wet: number): void {
+    node.connect(this.sfxBus);
+    const w = this.ctx!.createGain();
+    w.gain.value = wet;
+    node.connect(w).connect(this.send);
+  }
+
+  /** Band-passed noise whose pitch slides: a hiss, a whoosh, a scrape. */
+  private hiss(at: number, dur: number, from: number, to: number, q: number, peak: number, attack: number): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = q;
+    band.frequency.setValueAtTime(from, at);
+    band.frequency.exponentialRampToValueAtTime(to, at + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(peak, at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(band).connect(g);
+    this.toSfx(g, 0.9);
+    src.start(at);
+    src.stop(at + dur + 0.05);
+  }
+
+  /** High, slightly mistuned partials in pairs: struck or drawn steel. */
+  private ring(at: number, freqs: number[], peak: number, decay: number, glide: number): void {
+    const ctx = this.ctx!;
+    const mix = ctx.createGain();
+    freqs.forEach((freq, i) => {
+      for (const detune of [0, 9]) {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = freq;
+        osc.detune.setValueAtTime(detune, at);
+        osc.detune.linearRampToValueAtTime(detune + glide, at + 0.5);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(peak / (1 + i * 0.5), at + 0.004);
+        g.gain.setTargetAtTime(0, at + 0.01, decay / (3 + i));
+        osc.connect(g).connect(mix);
+        osc.start(at);
+        osc.stop(at + decay * 2.5);
+      }
+    });
+    this.toSfx(mix, 1.2);
+  }
+
+  /** A falling sine: the weight behind an impact. */
+  private thump(at: number, from: number, to: number, dur: number, peak: number, attack: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.frequency.setValueAtTime(from, at);
+    osc.frequency.exponentialRampToValueAtTime(to, at + dur * 0.6);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(peak, at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    osc.connect(g);
+    this.toSfx(g, 0.4);
+    osc.start(at);
+    osc.stop(at + dur + 0.05);
+  }
+
+  /** Steel dragging on stone: gritty noise over a low rumble, rising as the blade comes up. */
+  private grind(at: number, dur: number): void {
+    const ctx = this.ctx!;
+    const end = at + dur;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 2.5;
+    band.frequency.setValueAtTime(900, at);
+    band.frequency.linearRampToValueAtTime(1900, end);
+    // Two clashing wobbles break the noise into grit.
+    const grit = ctx.createGain();
+    grit.gain.value = 0.55;
+    for (const [type, rate] of [['sawtooth', 17], ['square', 11.3]] as const) {
+      const lfo = ctx.createOscillator();
+      lfo.type = type;
+      lfo.frequency.value = rate;
+      const depth = ctx.createGain();
+      depth.gain.value = 0.22;
+      lfo.connect(depth).connect(grit.gain);
+      lfo.start(at);
+      lfo.stop(end + 0.1);
+    }
+    const level = ctx.createGain();
+    level.gain.setValueAtTime(0, at);
+    level.gain.linearRampToValueAtTime(0.07, at + 0.3);
+    level.gain.linearRampToValueAtTime(0.14, end - 0.05);
+    level.gain.linearRampToValueAtTime(0, end);
+    src.connect(band).connect(grit).connect(level);
+    this.toSfx(level, 0.5);
+
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.value = 140;
+    const rumble = ctx.createGain();
+    rumble.gain.setValueAtTime(0, at);
+    rumble.gain.linearRampToValueAtTime(0.3, at + 0.5);
+    rumble.gain.linearRampToValueAtTime(0.45, end - 0.05);
+    rumble.gain.linearRampToValueAtTime(0, end);
+    src.connect(low).connect(rumble);
+    this.toSfx(rumble, 0.2);
+
+    src.start(at);
+    src.stop(end + 0.1);
+  }
+
+  /** Air and tone climbing toward the cut, stopped dead just before it. */
+  private swell(at: number, dur: number): void {
+    const ctx = this.ctx!;
+    const end = at + dur;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 1.2;
+    band.frequency.setValueAtTime(500, at);
+    band.frequency.exponentialRampToValueAtTime(6500, end);
+    const air = ctx.createGain();
+    air.gain.setValueAtTime(0.0005, at);
+    air.gain.exponentialRampToValueAtTime(0.2, end);
+    air.gain.linearRampToValueAtTime(0, end + 0.03);
+    src.connect(band).connect(air);
+    this.toSfx(air, 0.6);
+    src.start(at);
+    src.stop(end + 0.1);
+
+    const tone = ctx.createGain();
+    tone.gain.setValueAtTime(0.0005, at);
+    tone.gain.exponentialRampToValueAtTime(0.05, end);
+    tone.gain.linearRampToValueAtTime(0, end + 0.03);
+    for (const [from, to] of [[196, 587], [294, 880]]) {
+      const osc = ctx.createOscillator();
+      osc.frequency.setValueAtTime(from, at);
+      osc.frequency.exponentialRampToValueAtTime(to, end);
+      osc.connect(tone);
+      osc.start(at);
+      osc.stop(end + 0.1);
+    }
+    this.toSfx(tone, 0.6);
   }
 
   /** Current output peak, 0..1. */
@@ -197,7 +387,11 @@ export class Music {
     this.analyser.fftSize = 1024;
     this.output = ctx.createGain();
     this.output.gain.value = this.outputGain();
-    this.master.connect(limiter).connect(this.analyser).connect(this.output).connect(ctx.destination);
+    this.ducker = ctx.createGain();
+    this.master.connect(this.ducker).connect(limiter).connect(this.analyser).connect(this.output).connect(ctx.destination);
+    this.sfxBus = ctx.createGain();
+    this.sfxBus.gain.value = 0.9;
+    this.sfxBus.connect(limiter);
 
     this.dry = ctx.createGain();
     this.dry.gain.value = 0.8;

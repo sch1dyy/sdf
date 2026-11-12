@@ -7,6 +7,7 @@ attribute vec4 aSeed;
 uniform float uTime;
 uniform float uScale;
 uniform float uGain;
+uniform float uDim;
 uniform vec3 uMin;
 uniform vec3 uSize;
 uniform vec3 uDrift;
@@ -36,7 +37,7 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   float haze = exp(-0.0009 * mv.z * mv.z);
-  vAlpha = (uBase + uBeam * lit * uGain) * twinkle * edge * haze;
+  vAlpha = (uBase + uBeam * lit * uGain) * twinkle * edge * haze * uDim;
   vMix = aSeed.z;
   gl_PointSize = clamp(uPoint * (0.6 + aSeed.y * 0.8) * uScale / -mv.z, 1.0, uMaxPoint);
 }`;
@@ -68,6 +69,7 @@ void main() {
 const SHAFT_FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uGain;
+uniform float uDim;
 uniform vec3 uTop;
 uniform vec3 uBottom;
 varying vec2 vUv;
@@ -108,7 +110,8 @@ interface MoteOptions {
 }
 
 export interface Atmosphere {
-  update(time: number, ignite: number): void;
+  /** dim (0..1) fades the haze, motes and light shafts out, for when the shrine goes dark. */
+  update(time: number, ignite: number, dim?: number): void;
   /** Low-res pixels per world unit at distance 1, so motes keep their apparent size. */
   setPixelScale(scale: number): void;
 }
@@ -117,6 +120,7 @@ export function createAtmosphere(scene: THREE.Scene): Atmosphere {
   const uTime = { value: 0 };
   const uScale = { value: 440 };
   const uGain = { value: 1 };
+  const uDim = { value: 1 };
 
   const motes = (o: MoteOptions) => {
     const rand = mulberry32(o.seed);
@@ -138,6 +142,7 @@ export function createAtmosphere(scene: THREE.Scene): Atmosphere {
           uTime,
           uScale,
           uGain,
+          uDim,
           uMin: { value: new THREE.Vector3(...o.min) },
           uSize: { value: new THREE.Vector3(o.max[0] - o.min[0], o.max[1] - o.min[1], o.max[2] - o.min[2]) },
           uDrift: { value: new THREE.Vector3(...o.drift) },
@@ -235,13 +240,14 @@ export function createAtmosphere(scene: THREE.Scene): Atmosphere {
   let last = 0;
 
   return {
-    update(time, ignite) {
+    update(time, ignite, dim = 1) {
       const dt = Math.min(time - last, 0.05);
       last = time;
       uTime.value = time;
       uGain.value = ignite;
-      for (const s of shafts) s.uniforms.uGain.value = s.gain * ignite;
-      (halo.material as THREE.SpriteMaterial).opacity = 0.13 * ignite * (0.9 + 0.1 * Math.sin(time * 0.9));
+      uDim.value = dim;
+      for (const s of shafts) s.uniforms.uGain.value = s.gain * ignite * dim;
+      (halo.material as THREE.SpriteMaterial).opacity = 0.13 * ignite * dim * (0.9 + 0.1 * Math.sin(time * 0.9));
       for (const b of banks) {
         const m = b.mesh;
         m.position.x += b.speed * dt;
@@ -250,7 +256,7 @@ export function createAtmosphere(scene: THREE.Scene): Atmosphere {
         m.position.y = b.y + Math.sin(time * 0.13 + b.phase) * 0.12;
         // Fade near the wrap point so a bank never pops in or out.
         const fadeEdge = Math.min(1, (20 - Math.abs(m.position.x)) / 4);
-        (m.material as THREE.MeshBasicMaterial).opacity = b.opacity * fadeEdge * (0.8 + 0.2 * Math.sin(time * 0.2 + b.phase));
+        (m.material as THREE.MeshBasicMaterial).opacity = b.opacity * fadeEdge * dim * (0.8 + 0.2 * Math.sin(time * 0.2 + b.phase));
       }
     },
 

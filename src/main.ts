@@ -1,6 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { Music } from './audio/music';
+import { Cinematic } from './cinematic';
 import { Controls, INSPECT_LIMITS, SCENE_LIMITS, SCENE_START, type Orbit } from './controls';
 import { RetroPipeline } from './retro/pipeline';
 import { createAtmosphere } from './scene/atmosphere';
@@ -34,25 +35,40 @@ function boot(): void {
 
   const controls = new Controls(canvas);
   // On a tall, narrow screen start a little to one side, so the figure behind the sword is in view.
-  if (window.innerWidth < window.innerHeight * 0.8) controls.load({ ...SCENE_START, yaw: 0.36 }, SCENE_LIMITS);
+  const startOrbit: Orbit = window.innerWidth < window.innerHeight * 0.8 ? { ...SCENE_START, yaw: 0.36 } : { ...SCENE_START };
+  controls.load(startOrbit, SCENE_LIMITS);
   const music = new Music();
-  const motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motion = calm ? 0 : 1;
 
   let phase: 'title' | 'intro' | 'live' = 'title';
   let time = 0;
   let intro = 0;
   let enteredAt = 0;
-  let pulse = 0;
   let loudness = 0;
 
   // Two camera rigs: one circling the sword, one circling the character. The controls
   // drive whichever is active; the other stays where it was left.
   let inspecting = false;
   let blend = 0; // 0 = scene view, 1 = inspecting
-  let sceneOrbit: Orbit = { ...SCENE_START };
+  let sceneOrbit: Orbit = { ...startOrbit };
   let inspectOrbit: Orbit = { ...INSPECT_START };
   let sharp = false;
   let baseFov = 34;
+
+  // Clicking the sword hands the camera to a third party for ten seconds.
+  const cinematic = new Cinematic(scene, camera, katana, pipeline, music, calm);
+  cinematic.onReset = () => controls.load(startOrbit, SCENE_LIMITS);
+  cinematic.onEnd = () => {
+    controls.enabled = true;
+    document.body.classList.remove('is-cinematic');
+  };
+
+  function drawSword(): void {
+    if (phase !== 'live' || inspecting || blend > 0 || !cinematic.start()) return;
+    controls.enabled = false;
+    document.body.classList.add('is-cinematic');
+  }
 
   function enterInspect(): void {
     if (inspecting || !controls.enabled) return;
@@ -86,22 +102,22 @@ function boot(): void {
 
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  function pointsAtCharacter(x: number, y: number): boolean {
+  /** What lies under a point on screen: whichever of the two is nearer along the ray. */
+  function pick(x: number, y: number): 'character' | 'sword' | null {
     ndc.set((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2);
     raycaster.setFromCamera(ndc, camera);
-    return raycaster.intersectObject(character.hitTarget, false).length > 0;
+    const figure = raycaster.intersectObject(character.hitTarget, false)[0];
+    const sword = raycaster.intersectObject(katana.hitTarget, false)[0];
+    if (figure && (!sword || figure.distance < sword.distance)) return 'character';
+    return sword ? 'sword' : null;
   }
 
   controls.onFirstDrag = () => ui.dismissHint();
   controls.onTap = (x, y) => {
     if (inspecting) return;
-    if (pointsAtCharacter(x, y)) {
-      enterInspect();
-      return;
-    }
-    katana.strike();
-    music.chime();
-    pulse = 1;
+    const target = pick(x, y);
+    if (target === 'character') enterInspect();
+    else if (target === 'sword') drawSword();
   };
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') exitInspect();
@@ -120,6 +136,7 @@ function boot(): void {
     const tan = clamp(0.21 / camera.aspect, Math.tan(THREE.MathUtils.degToRad(17)), Math.tan(THREE.MathUtils.degToRad(25)));
     baseFov = THREE.MathUtils.radToDeg(Math.atan(tan) * 2);
     atmosphere.setPixelScale(y / (2 * tan));
+    cinematic.setPixelScale(y / (2 * tan));
   }
   window.addEventListener('resize', resize);
   resize();
@@ -128,10 +145,11 @@ function boot(): void {
   const sceneLook = new THREE.Vector3();
   const inspectPos = new THREE.Vector3();
   const inspectLook = new THREE.Vector3();
+  const cinePos = new THREE.Vector3();
   const look = new THREE.Vector3();
   const anchor = new THREE.Vector3();
 
-  // Nothing in the shrine ever moves: only the camera does.
+  // Nothing in the shrine moves for the camera's sake: only the camera does.
   function placeCamera(b: number): void {
     // Scene rig. The opening shot drifts in from down the approach onto the sword's axis.
     const s = inspecting ? sceneOrbit : controls;
@@ -163,19 +181,40 @@ function boot(): void {
     );
 
     camera.position.lerpVectors(scenePos, inspectPos, b);
-    camera.lookAt(look.lerpVectors(sceneLook, inspectLook, b));
+    look.lerpVectors(sceneLook, inspectLook, b);
     // A slightly wider lens while inspecting fits his whole figure in at arm's length.
-    camera.fov = baseFov * lerp(1, 1.18, b);
+    let fov = baseFov * lerp(1, 1.18, b);
+
+    const w = cinematic.camWeight;
+    if (w > 0) {
+      if (cinematic.returning) {
+        // Home is wherever the scene's own rig now sits; come back to it from a little further off.
+        cinePos.copy(scenePos).sub(sceneLook).multiplyScalar(1.3).add(sceneLook);
+        cinePos.y += 0.35;
+        look.copy(sceneLook);
+      } else {
+        cinePos.copy(cinematic.camPos);
+        look.lerp(cinematic.camLook, w);
+      }
+      camera.position.lerp(cinePos, w);
+      fov *= cinematic.fovScale;
+    }
+
+    camera.lookAt(look);
+    if (cinematic.roll !== 0) camera.rotateZ(cinematic.roll);
+    camera.fov = fov;
     camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
   }
 
-  /** Keeps the "click to inspect" label pinned above the character's head. */
+  /** Pins the "click to inspect" label above the character, and shows what can be clicked. */
   function placeLabel(): void {
+    const idle = phase === 'live' && !inspecting && blend < 0.05 && !cinematic.active;
     anchor.copy(character.labelAnchor).project(camera);
-    const visible = phase === 'live' && !inspecting && blend < 0.05 && anchor.z < 1 && Math.abs(anchor.x) < 0.96 && anchor.y < 0.9 && anchor.y > -0.9;
-    const hot = visible && !controls.isDragging && controls.hover !== null && pointsAtCharacter(controls.hover.x, controls.hover.y);
-    ui.placeLabel(((anchor.x + 1) / 2) * window.innerWidth, ((1 - anchor.y) / 2) * window.innerHeight, visible, hot);
-    canvas.classList.toggle('can-inspect', hot);
+    const visible = idle && anchor.z < 1 && Math.abs(anchor.x) < 0.96 && anchor.y < 0.9 && anchor.y > -0.9;
+    const over = idle && !controls.isDragging && controls.hover ? pick(controls.hover.x, controls.hover.y) : null;
+    ui.placeLabel(((anchor.x + 1) / 2) * window.innerWidth, ((1 - anchor.y) / 2) * window.innerHeight, visible, over === 'character');
+    canvas.classList.toggle('is-clickable', over !== null);
   }
 
   /** How brightly the light over the sword burns: dim on the title screen, then it rises. */
@@ -183,7 +222,7 @@ function boot(): void {
     if (phase === 'title') return 0.2;
     const rise = lerp(0.2, 1, smoothstep(0.3, 3.6, time - enteredAt));
     const breath = 1 + 0.04 * Math.sin(time * 0.7);
-    return rise * breath + pulse * 0.3 + loudness * 0.12;
+    return rise * breath + cinematic.pulse * 0.4 + loudness * 0.12;
   }
 
   let previous = performance.now();
@@ -210,15 +249,16 @@ function boot(): void {
       resize();
     }
 
-    pulse *= Math.exp(-dt * 2.2);
     loudness += (music.level() - loudness) * damp(2, dt);
 
     controls.update(dt);
+    cinematic.advance(dt);
     const ignite = ignition();
     katana.update(time, dt);
     environment.update(time, ignite);
-    atmosphere.update(time, ignite);
+    atmosphere.update(time, ignite, cinematic.dim);
     placeCamera(easeInOutCubic(blend));
+    cinematic.apply();
     placeLabel();
 
     pipeline.fade = Math.min(1, pipeline.fade + dt / 1.8);
@@ -235,7 +275,19 @@ function boot(): void {
     document.body.classList.add('is-entered');
   };
   Object.assign(window, {
-    __blade: { controls, music, katana, character, pipeline, camera, scene, renderer, skip, state: () => ({ phase, intro, time, inspecting, blend }) },
+    __blade: {
+      controls,
+      music,
+      katana,
+      character,
+      cinematic,
+      pipeline,
+      camera,
+      scene,
+      renderer,
+      skip,
+      state: () => ({ phase, intro, time, inspecting, blend }),
+    },
   });
 }
 

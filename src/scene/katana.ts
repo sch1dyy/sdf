@@ -215,12 +215,30 @@ function tsubaGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** The sword draws after everything else solid, so the scene can be blacked out behind it. */
+export const SWORD_RENDER_ORDER = 6;
+
 export interface KatanaRig {
   /** The stone, the sword and its scabbard. */
   group: THREE.Group;
+  /** Invisible volume around the sword, for click tests. */
+  hitTarget: THREE.Object3D;
+  /** Where the sword sits while it is in the stone, in world space. */
+  rest: { position: THREE.Vector3; quaternion: THREE.Quaternion };
+  /** Landmarks on the sword, relative to the pose given to setPose. */
+  points: { grip: THREE.Vector3; collar: THREE.Vector3; tip: THREE.Vector3 };
+  /** Length of blade inside the stone. */
+  buried: number;
   update(time: number, dt: number): void;
-  /** A tap on the scene: the blade rings and the seal flares. */
-  strike(): void;
+  /** Takes the sword out of the stone's keeping and puts it at a world-space pose. */
+  setPose(position: THREE.Vector3, quaternion: THREE.Quaternion): void;
+  /** Puts the sword back in the stone. */
+  release(): void;
+  setVisible(visible: boolean): void;
+  /** A highlight on the blade at `along` (0 at the collar, 1 at the point). */
+  setGleam(along: number, strength: number): void;
+  /** The seal carved in the stone flares, then fades. */
+  flare(amount: number): void;
 }
 
 export function createKatana(envMap: THREE.Texture): KatanaRig {
@@ -452,29 +470,34 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
   add(group, new THREE.Mesh(new THREE.TubeGeometry(trail, 14, 0.007, 4), cord));
 
   // ── Motion ───────────────────────────────────────────────
-  let ring = 0;
-  let ringVel = 0;
-  let flare = 0;
-  let gleamAt = -10;
-  let now = 0;
+  const hitTarget = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.76, 0.4), new THREE.MeshBasicMaterial({ visible: false }));
+  hitTarget.position.set(0, 0.86, 0.02);
+  pivot.add(hitTarget);
+  pivot.traverse((o) => (o.renderOrder = SWORD_RENDER_ORDER));
+
+  group.updateMatrixWorld(true);
+  const rest = {
+    position: pivot.getWorldPosition(new THREE.Vector3()),
+    quaternion: pivot.getWorldQuaternion(new THREE.Quaternion()),
+  };
+  const toGroup = group.quaternion.clone().invert();
+  const points = {
+    grip: new THREE.Vector3(0, GROUND + GRIP_START + GRIP_LEN / 2, sword.position.z),
+    collar: new THREE.Vector3(0, GROUND, sword.position.z),
+    tip: new THREE.Vector3(0, GROUND - LENGTH, sword.position.z + bladeRing(LENGTH * 0.999)[0].z),
+  };
+
+  let sealFlare = 0;
+  let gleam: [number, number] | null = null;
 
   return {
     group,
+    hitTarget,
+    rest,
+    points,
+    buried: BURIED,
 
     update(time, dt) {
-      now = time;
-
-      // Struck, the blade rings against the stone and settles. Small fixed steps keep the
-      // spring stable when a frame runs long.
-      const steps = Math.max(1, Math.ceil(dt / 0.016));
-      const h = dt / steps;
-      for (let i = 0; i < steps; i++) {
-        ringVel += (-ring * 900 - ringVel * 3.2) * h;
-        ring += ringVel * h;
-      }
-      pivot.rotation.z = TILT_Z + ring * 0.4;
-      pivot.rotation.x = TILT_X + ring;
-
       // Talisman and bell hang and stir in the air.
       talisman.rotation.x = Math.sin(time * 1.1) * 0.05;
       talisman.rotation.z = Math.sin(time * 0.83 + 1) * 0.06;
@@ -482,21 +505,38 @@ export function createKatana(envMap: THREE.Texture): KatanaRig {
       bell.rotation.z = Math.sin(time * 1.3 + 2) * 0.04;
       bell.rotation.x = Math.sin(time * 0.95) * 0.05;
 
-      flare *= Math.exp(-dt * 1.7);
-      sealMat.emissiveIntensity = 0.26 + 0.1 * Math.sin(time * 0.8) + flare * 1.8;
+      sealFlare *= Math.exp(-dt * 1.7);
+      sealMat.emissiveIntensity = 0.26 + 0.1 * Math.sin(time * 0.8) + sealFlare * 1.8;
 
-      // Gleam every so often, and at once when struck.
+      // Left alone, a gleam runs down the blade every so often.
       const cycle = time % 11;
-      const since = time - gleamAt;
-      const phase = since < 1.4 ? since / 1.4 : cycle < 1.8 ? cycle / 1.8 : -1;
-      if (phase >= 0) glint.value.set(lerp(-0.06, GROUND / LENGTH, phase), Math.sin(Math.PI * phase) * 0.9);
+      if (gleam) glint.value.set(gleam[0], gleam[1]);
+      else if (cycle < 1.8) glint.value.set(lerp(-0.06, GROUND / LENGTH, cycle / 1.8), Math.sin((Math.PI * cycle) / 1.8) * 0.9);
       else glint.value.y = 0;
     },
 
-    strike() {
-      ringVel += 0.55;
-      flare = 1;
-      gleamAt = now;
+    setPose(position, quaternion) {
+      pivot.position.copy(position).sub(group.position).applyQuaternion(toGroup);
+      pivot.quaternion.copy(toGroup).multiply(quaternion);
+    },
+
+    release() {
+      pivot.position.set(0, DAIS_TOP, 0);
+      pivot.rotation.set(TILT_X, 0, TILT_Z);
+      pivot.visible = true;
+      gleam = null;
+    },
+
+    setVisible(visible) {
+      pivot.visible = visible;
+    },
+
+    setGleam(along, strength) {
+      gleam = [along, strength];
+    },
+
+    flare(amount) {
+      sealFlare = Math.max(sealFlare, amount);
     },
   };
 }
